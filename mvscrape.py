@@ -191,6 +191,7 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xtitle)
     # tag originaltitle
     xoriginaltitle = etree.Element("originaltitle")
+    xoriginaltitle.text = ""
     root.append(xoriginaltitle)
     # tag sorttitle
     xsorttitle = etree.Element("sorttitle")
@@ -198,6 +199,7 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xsorttitle)
     # tag set
     xset = etree.Element("set")
+    xset.text = ""
     root.append(xset)
     # tag ratings
     xrating = etree.Element("rating")
@@ -209,9 +211,11 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xyear)
     # tag top250
     xtop250 = etree.Element("top250")
+    xtop250.text = ""
     root.append(xtop250)
     # tag votes
     xvotes = etree.Element("votes")
+    xvotes.text = ""
     root.append(xvotes)
     # tag outline
     xoutline = etree.Element("outline")
@@ -223,15 +227,17 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xplot)
     # tag tagline
     xtagline = etree.Element("tagline")
+    xtagline.text = ""
     root.append(xtagline)
     # tag runtime
     xruntime = etree.Element("runtime")
+    xruntime.text = ""
     root.append(xruntime)
     # tag thumb
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = movie_item['cover_pictures'].get("pic_770x1080")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="fanart")
     xthumb.text = movie_item['cover_pictures'].get("pic_1920x1080")
     root.append(xthumb)
     xthumb = etree.Element("thumb")
@@ -243,23 +249,27 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     xthumb = etree.Element("thumb")
     xthumb.text = movie_item['cover_pictures'].get("pic_408x230")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="landscape")
     xthumb.text = movie_item['cover_pictures'].get("pic_498x280")
     root.append(xthumb)
     # tag poster
     xposter = etree.Element("poster")
-    xposter.text = movie_item['cover_pictures'].get("pic_350x490")
+    xthumb = etree.SubElement(xposter, "thumb")
+    xthumb.text = movie_item['cover_pictures'].get("pic_350x490")
     root.append(xposter)
     # tag landscape
     xlandscape = etree.Element("landscape")
-    xlandscape.text = movie_item['cover_pictures'].get("pic_498x280")
+    xthumb = etree.SubElement(xlandscape, "thumb")
+    xthumb.text = movie_item['cover_pictures'].get("pic_498x280")
     root.append(xlandscape)
     # tag fanart
     xfanart = etree.Element("fanart")
-    xfanart.text = movie_item['cover_pictures'].get("pic_1920x1080")
+    xthumb = etree.SubElement(xfanart, "thumb")
+    xthumb.text = movie_item['cover_pictures'].get("pic_1920x1080")
     root.append(xfanart)
     # tag mpaa
     xmpaa = etree.Element("mpaa")
+    xmpaa.text = ""
     root.append(xmpaa)
     # tag playcount
     xplaycount = etree.Element("playcount")
@@ -270,9 +280,11 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xid)
     # tag filenameandpath
     xpath = etree.Element("filenameandpath")
+    xpath.text = ""
     root.append(xpath)
     # tag trailer
     xtrailer = etree.Element("trailer")
+    xtrailer.text = ""
     root.append(xtrailer)
     # tag genre
     xgenre = etree.Element("genre")
@@ -284,12 +296,15 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xcountry)
     # tag credits
     xcredits = etree.Element("credits")
+    xcredits.text = ""
     root.append(xcredits)
     # tag fileinfo
     xfileinfo = etree.Element("fileinfo")
+    xfileinfo.text = ""
     root.append(xfileinfo)
     # tag studio
     xstudio = etree.Element("studio")
+    xstudio.text = ""
     root.append(xstudio)
     # tag director
     director_list = movie_item.get("directors")
@@ -306,7 +321,7 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
         xrole = etree.SubElement(xactor, "role")
         xrole.text = ""
         root.append(xactor)
-    nfo_file.write(etree.tostring(root, pretty_print=True))
+    nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
 
 
 def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
@@ -452,7 +467,7 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
         xrole = etree.SubElement(xactor, "role")
         xrole.text = ""
         root.append(xactor)
-    nfo_file.write(etree.tostring(root, pretty_print=True))
+    nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
 
 
 if __name__ == "__main__":
