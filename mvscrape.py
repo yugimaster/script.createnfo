@@ -12,6 +12,7 @@ import gzip
 import StringIO
 import re
 import os
+import time
 import datetime
 from lxml import etree
 
@@ -91,6 +92,10 @@ class TencentVideo(object):
             QUA=QUA)
         return self.get_json(SERVER + API)
 
+    def episode_list(self, cid, index):
+        API = '/cover_details/get_cover_videos?tv_cgi_ver=1.0&format=json&req_from=PVS_APK&page_start={0}&page_size=15&video_filter=all&cid={1}&Q-UA={2}'.format(index, cid, QUA)
+        return self.get_json(SERVER + API)
+
 
 def GetFilterList(channel_id):
     data = TencentVideo().filter_list(channel_id)
@@ -146,6 +151,15 @@ def GetVideoDetail(cid):
     return data
 
 
+def GetEpisodeList(cid, index):
+    data = TencentVideo().episode_list(cid, index)
+    if "data" in data:
+        data = data['data']
+        return data.get("videos")
+    else:
+        return None
+
+
 def SaveMovieFiles(cid, filter_name):
     data = GetVideoDetail(cid)
     data = data.get("data")
@@ -172,13 +186,31 @@ def SaveTVShowFiles(cid, filter_name):
     if os.path.exists(file_path):
         return
     os.mkdir(file_path)
-    strm_path = file_path + "\\tvshow.strm"
     nfo_path = file_path + "\\tvshow.nfo"
-    if os.path.exists(strm_path) and os.path.exists(nfo_path):
+    if os.path.exists(nfo_path):
         return
-    with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
-        f1.write("playvideo")
-        CreateTVShowNfoFiles(data, filter_name, f2)
+    with open(nfo_path, "w+") as f:
+        CreateTVShowNfoFiles(data, filter_name, f)
+    SaveSeasonEpisodeFiles(data.get("c_id"), title, filter_name, file_path)
+
+
+def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, file_path, page=0):
+    if not cid:
+        return
+    episode_list = GetEpisodeList(cid, page)
+    if not episode_list:
+        return
+    count = 1
+    for episode in episode_list:
+        epi_title = episode['v_title']
+        strm_path = file_path + "\\" + epi_title.replace("_", "_ep") + ".strm"
+        nfo_path = strm_path[:-5] + ".nfo"
+        if os.path.exists(strm_path) and os.path.exists(nfo_path):
+            return
+        with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
+            f1.write(episode['play_url'])
+            CreateEpisodeNfoFiles(episode, count, tv_title, filter_name, f2)
+        count += 1
 
 
 def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
@@ -205,10 +237,18 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     xrating = etree.Element("rating")
     xrating.text = movie_item.get("score")
     root.append(xrating)
+    # tag userrating
+    xuserrating = etree.Element("userrating")
+    xuserrating.text = ""
+    root.append(xuserrating)
     # tag year
     xyear = etree.Element("year")
     xyear.text = movie_item.get("year")
     root.append(xyear)
+    # tag premiered
+    xpremiered = etree.Element("premiered")
+    xpremiered.text = movie_item.get("publish_date")
+    root.append(xpremiered)
     # tag top250
     xtop250 = etree.Element("top250")
     xtop250.text = ""
@@ -237,31 +277,24 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = movie_item['cover_pictures'].get("pic_770x1080")
     root.append(xthumb)
-    xthumb = etree.Element("thumb", aspect="fanart")
-    xthumb.text = movie_item['cover_pictures'].get("pic_1920x1080")
-    root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = movie_item['cover_pictures'].get("pic_260x364")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = movie_item['cover_pictures'].get("pic_350x490")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = movie_item.get("ver_pic_url")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = movie_item['cover_pictures'].get("pic_498x280")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
     xthumb.text = movie_item['cover_pictures'].get("pic_408x230")
     root.append(xthumb)
-    xthumb = etree.Element("thumb", aspect="landscape")
-    xthumb.text = movie_item['cover_pictures'].get("pic_498x280")
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = movie_item.get("hori_pic_url")
     root.append(xthumb)
-    # tag poster
-    xposter = etree.Element("poster")
-    xthumb = etree.SubElement(xposter, "thumb")
-    xthumb.text = movie_item['cover_pictures'].get("pic_350x490")
-    root.append(xposter)
-    # tag landscape
-    xlandscape = etree.Element("landscape")
-    xthumb = etree.SubElement(xlandscape, "thumb")
-    xthumb.text = movie_item['cover_pictures'].get("pic_498x280")
-    root.append(xlandscape)
     # tag fanart
     xfanart = etree.Element("fanart")
     xthumb = etree.SubElement(xfanart, "thumb")
@@ -273,7 +306,12 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xmpaa)
     # tag playcount
     xplaycount = etree.Element("playcount")
+    xplaycount.text = ""
     root.append(xplaycount)
+    # tag lastplayed
+    xlastplayed = etree.Element("lastplayed")
+    xlastplayed.text = ""
+    root.append(xlastplayed)
     # tag id
     xid = etree.Element("id")
     xid.text = movie_item.get("c_id")
@@ -302,6 +340,18 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     xfileinfo = etree.Element("fileinfo")
     xfileinfo.text = ""
     root.append(xfileinfo)
+    # tag status
+    xstatus = etree.Element("status")
+    xstatus.text = ""
+    root.append(xstatus)
+    # tag code
+    xcode = etree.Element("code")
+    xcode.text = ""
+    root.append(xcode)
+    # tag aired
+    xaired = etree.Element("aired")
+    xaired.text = ""
+    root.append(xaired)
     # tag studio
     xstudio = etree.Element("studio")
     xstudio.text = ""
@@ -320,7 +370,22 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
         xname.text = item
         xrole = etree.SubElement(xactor, "role")
         xrole.text = ""
+        xorder = etree.SubElement(xactor, "order")
+        xorder.text = ""
+        xthumb = etree.SubElement(xactor, "thumb")
+        xthumb.text = ""
         root.append(xactor)
+    # tag resume
+    xresume = etree.Element("resume")
+    xposition = etree.SubElement(xresume, "position")
+    xposition.text = ""
+    xtotal = etree.SubElement(xresume, "total")
+    xtotal.text = ""
+    root.append(xresume)
+    # tag dateadded
+    xdateadded = etree.Element("dateadded")
+    xdateadded.text = SecondtoYMDHMS(time.time())
+    root.append(xdateadded)
     nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
 
 
@@ -334,6 +399,7 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
     root.append(xtitle)
     # tag showtitle
     xshowtitle = etree.Element("showtitle")
+    xshowtitle.text = title
     root.append(xshowtitle)
     # tag sorttitle
     xsorttitle = etree.Element("sorttitle")
@@ -341,6 +407,7 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
     root.append(xsorttitle)
     # tag set
     xset = etree.Element("set")
+    xset.text = ""
     root.append(xset)
     # tag ratings
     xrating = etree.Element("rating")
@@ -355,17 +422,19 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
     root.append(xtop250)
     # tag season
     xseason = etree.Element("season")
+    xseason.text = "0"
     root.append(xseason)
     # tag episode
     xepisode = etree.Element("episode")
+    xepisode.text = tv_item.get("episode_all")
     root.append(xepisode)
     # tag displayseason
     xdisplayseason = etree.Element("displayseason")
-    xdisplayseason.text = tv_item.get("episode_all")
+    xdisplayseason.text = "-1"
     root.append(xdisplayseason)
     # tag displayepisode
     xdisplayepisode = etree.Element("displayepisode")
-    xdisplayepisode.text = str(tv_item.get("video_num"))
+    xdisplayepisode.text = "-1"
     root.append(xdisplayepisode)
     # tag votes
     xvotes = etree.Element("votes")
@@ -380,54 +449,79 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
     root.append(xplot)
     # tag tagline
     xtagline = etree.Element("tagline")
+    xtagline.text = ""
     root.append(xtagline)
     # tag runtime
     xruntime = etree.Element("runtime")
+    xruntime.text = ""
     root.append(xruntime)
     # tag thumb
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = tv_item['cover_pictures'].get("pic_770x1080")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
-    xthumb.text = tv_item['cover_pictures'].get("pic_1920x1080")
-    root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = tv_item['cover_pictures'].get("pic_260x364")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="poster")
     xthumb.text = tv_item['cover_pictures'].get("pic_350x490")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
-    xthumb.text = tv_item['cover_pictures'].get("pic_408x230")
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = tv_item.get("ver_pic_url")
     root.append(xthumb)
-    xthumb = etree.Element("thumb")
+    xthumb = etree.Element("thumb", aspect="banner")
     xthumb.text = tv_item['cover_pictures'].get("pic_498x280")
     root.append(xthumb)
-    # tag poster
-    xposter = etree.Element("poster")
-    xposter.text = tv_item['cover_pictures'].get("pic_350x490")
-    root.append(xposter)
-    # tag landscape
-    xlandscape = etree.Element("landscape")
-    xlandscape.text = tv_item['cover_pictures'].get("pic_498x280")
-    root.append(xlandscape)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = tv_item['cover_pictures'].get("pic_408x230")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = tv_item.get("hori_pic_url")
+    root.append(xthumb)
     # tag fanart
     xfanart = etree.Element("fanart")
-    xfanart.text = tv_item['cover_pictures'].get("pic_1920x1080")
+    xthumb = etree.SubElement(xfanart, "thumb")
+    xthumb.text = tv_item['cover_pictures'].get("pic_1920x1080")
     root.append(xfanart)
     # tag mpaa
     xmpaa = etree.Element("mpaa")
+    xmpaa.text = ""
     root.append(xmpaa)
     # tag playcount
     xplaycount = etree.Element("playcount")
+    xplaycount.text = ""
     root.append(xplaycount)
+    # tag lastplayed
+    xlastplayed = etree.Element("lastplayed")
+    xlastplayed.text = ""
+    root.append(xlastplayed)
+    # tag episodeguide
+    xepisodeguide = etree.Element("episodeguide")
+    xepisodeguide.text = ""
+    root.append(xepisodeguide)
     # tag id
     xid = etree.Element("id")
     xid.text = tv_item.get("c_id")
     root.append(xid)
+    # tag uniqueid
+    xuniqueid = etree.Element("uniqueid")
+    xuniqueid.text = ""
+    root.append(xuniqueid)
     # tag filenameandpath
     xpath = etree.Element("filenameandpath")
+    xpath.text = ""
     root.append(xpath)
+    # tag status
+    xstatus = etree.Element("status")
+    xstatus.text = ""
+    root.append(xstatus)
+    # tag code
+    xcode = etree.Element("code")
+    xcode.text = ""
+    root.append(xcode)
+    # tag aired
+    xaired = etree.Element("aired")
+    xaired.text = ""
+    root.append(xaired)
     # tag trailer
     xtrailer = etree.Element("trailer")
     root.append(xtrailer)
@@ -467,7 +561,168 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
         xrole = etree.SubElement(xactor, "role")
         xrole.text = ""
         root.append(xactor)
+    # tag resume
+    xresume = etree.Element("resume")
+    xposition = etree.SubElement(xresume, "position")
+    xposition.text = ""
+    xtotal = etree.SubElement(xresume, "total")
+    xtotal.text = ""
+    root.append(xresume)
+    # tag dateadded
+    xdateadded = etree.Element("dateadded")
+    xdateadded.text = SecondtoYMDHMS(time.time())
+    root.append(xdateadded)
     nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
+
+
+def CreateEpisodeNfoFiles(epi_item, index, tv_title, filter_name, nfo_file):
+    title = epi_item.get("v_title")
+    # episodedetails *.nfo file
+    root = etree.Element("episodedetails")
+    # tag title
+    xtitle = etree.Element("title")
+    xtitle.text = title
+    root.append(xtitle)
+    # tag showtitle
+    xshowtitle = etree.Element("showtitle")
+    xshowtitle.text = tv_title
+    root.append(xshowtitle)
+    # tag rate
+    xrate = etree.Element("rate")
+    xrate.text = ""
+    root.append(xrate)
+    # tag userrating
+    xuserrating = etree.Element("userrating")
+    xuserrating.text = ""
+    root.append(xuserrating)
+    # tag top250
+    xtop250 = etree.Element("top250")
+    xtop250.text = ""
+    root.append(xtop250)
+    # tag season
+    xseason = etree.Element("season")
+    xseason.text = ""
+    root.append(xseason)
+    # tag episode
+    xepisode = etree.Element("episode")
+    xepisode.text = str(index)
+    # tag displayseason
+    xdisplayseason = etree.Element("displayseason")
+    xdisplayseason.text = "-1"
+    root.append(xdisplayseason)
+    # tag displayepisode
+    xdisplayepisode = etree.Element("displayepisode")
+    xdisplayepisode.text = "-1"
+    root.append(xdisplayepisode)
+    # tag outline
+    xoutline = etree.Element("outline")
+    xoutline.text = epi_item.get("tips")
+    root.append(xoutline)
+    # tag plot
+    xplot = etree.Element("plot")
+    xplot.text = epi_item.get("v_description")
+    root.append(xplot)
+    # tag tagline
+    xtagline = etree.Element("tagline")
+    xtagline.text = ""
+    root.append(xtagline)
+    # tag runtime
+    xruntime = etree.Element("runtime")
+    xruntime.text = str(int(epi_item.get("duration")) / 60)
+    root.append(xruntime)
+    # tag thumb
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = epi_item['v_ext_info'].get("pic_228x128")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = epi_item['v_ext_info'].get("pic_160x90")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = epi_item['v_ext_info'].get("pic_496x280")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = epi_item['v_ext_info'].get("pic_640x360")
+    root.append(xthumb)
+    # tag mpaa
+    xmpaa = etree.Element("mpaa")
+    xmpaa.text = ""
+    root.append(xmpaa)
+    # tag playcount
+    xplaycount = etree.Element("playcount")
+    xplaycount.text = ""
+    root.append(xplaycount)
+    # tag lastplayed
+    xlastplayed = etree.Element("lastplayed")
+    xlastplayed.text = ""
+    root.append(xlastplayed)
+    # tag id
+    xid = etree.Element("id")
+    xid.text = epi_item['v_id']
+    root.append(xid)
+    # tag uniqueid
+    xuniqueid = etree.Element("uniqueid")
+    xuniqueid.text = ""
+    root.append(xuniqueid)
+    # tag genre
+    xgenre = etree.Element("genre")
+    xgenre.text = filter_name
+    root.append(xgenre)
+    # tag credits
+    xcredits = etree.Element("credits")
+    xcredits.text = ""
+    root.append(xcredits)
+    # tag director
+    xdirector = etree.Element("director")
+    xdirector.text = ""
+    root.append(xdirector)
+    # tag premiered
+    xpremiered = etree.Element("premiered")
+    xpremiered.text = epi_item.get("create_time")[:10]
+    root.append(xpremiered)
+    # tag year
+    xyear = etree.Element("year")
+    xyear.text = epi_item.get("create_time")[:4]
+    root.append(xyear)
+    # tag status
+    xstatus = etree.Element("status")
+    xstatus.text = ""
+    root.append(xstatus)
+    # tag code
+    xcode = etree.Element("code")
+    xcode.text = ""
+    root.append(xcode)
+    # tag aired
+    xaired = etree.Element("aired")
+    xaired.text = epi_item['v_ext_info'].get("publish_date")
+    root.append(xaired)
+    # tag studio
+    xstudio = etree.Element("studio")
+    xstudio.text = ""
+    root.append(xstudio)
+    # tag trailer
+    xtrailer = etree.Element("trailer")
+    xtrailer.text = ""
+    root.append(xtrailer)
+    # tag actor
+    xactor = etree.Element("actor")
+    xactor.text = ""
+    root.append(xactor)
+    # tag resume
+    xresume = etree.Element("resume")
+    xposition = etree.SubElement(xresume, "position")
+    xposition.text = ""
+    xtotal = etree.SubElement(xresume, "total")
+    xtotal.text = ""
+    root.append(xresume)
+    # tag dateadded
+    xdateadded = etree.Element("dateadded")
+    xdateadded.text = SecondtoYMDHMS(time.time())
+    root.append(xdateadded)
+    nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
+
+
+def SecondtoYMDHMS(secTime):
+    return str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(secTime)))
 
 
 if __name__ == "__main__":
