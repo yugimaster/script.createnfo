@@ -122,6 +122,7 @@ def GetVideoList():
         if channel['channel_id'] != "tv":
             continue
         channel_id = channel['channel_id']
+        channel_name = channel['chi_name']
         filters = GetFilterList(channel_id)
         select_type = channel['select_type']
         for item in filters:
@@ -135,10 +136,13 @@ def GetVideoList():
                 cid = listitem.get("id")
                 print title
                 print channel_id
+                if title == "":
+                    print "No name exit"
+                    return
                 if channel_id == "movie":
-                    threads.append(gevent.spawn(SaveMovieFiles, cid, item['chi_name']))
+                    threads.append(gevent.spawn(SaveMovieFiles, cid, item['chi_name'], channel_name))
                 elif channel_id == "tv":
-                    threads.append(gevent.spawn(SaveTVShowFiles, cid, item['chi_name']))
+                    threads.append(gevent.spawn(SaveTVShowFiles, cid, item['chi_name'], channel_name))
     gevent.joinall(threads)
 
 
@@ -160,41 +164,45 @@ def GetEpisodeList(cid, index):
         return None
 
 
-def SaveMovieFiles(cid, filter_name):
+def SaveMovieFiles(cid, filter_name, channel_name):
     data = GetVideoDetail(cid)
     data = data.get("data")
     if not data:
         return
-    title = data.get("title")
+    title = data.get("title").replace(":", "_")
+    if title == "":
+        return
     file_path = "C:\\xbmc-workspace\\LocalDB\\Movies\\"
     strm_path = file_path + title + ".strm"
     nfo_path = file_path + title + ".nfo"
-    if os.path.exists(strm_path) and os.path.exists(nfo_path):
-        return
-    with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
+    with open(strm_path, "w+") as f1:
         f1.write("playvideo")
-        CreateMovieNfoFiles(data, filter_name, f2)
+    if not NeedAddNfoFile(nfo_path, filter_name):
+        return
+    with open(nfo_path, "w+") as f2:
+        CreateMovieNfoFiles(data, filter_name, channel_name, f2)
 
 
-def SaveTVShowFiles(cid, filter_name):
+def SaveTVShowFiles(cid, filter_name, channel_name):
     data = GetVideoDetail(cid)
     data = data.get("data")
     if not data:
         return
-    title = data.get("title")
-    file_path = "C:\\xbmc-workspace\\LocalDB\\TVShows\\" + title
-    if os.path.exists(file_path):
+    title = data.get("title").replace(":", "_")
+    if title == "":
         return
-    os.mkdir(file_path)
+    file_path = "C:\\xbmc-workspace\\LocalDB\\TVShows\\" + title
+    if not os.path.exists(file_path):
+        os.mkdir(file_path)
     nfo_path = file_path + "\\tvshow.nfo"
-    if os.path.exists(nfo_path):
+    if not NeedAddNfoFile(nfo_path, filter_name):
         return
     with open(nfo_path, "w+") as f:
-        CreateTVShowNfoFiles(data, filter_name, f)
-    SaveSeasonEpisodeFiles(data.get("c_id"), title, filter_name, file_path)
+        CreateTVShowNfoFiles(data, filter_name, channel_name, f)
+    SaveSeasonEpisodeFiles(data.get("c_id"), title, filter_name, channel_name, file_path)
 
 
-def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, file_path, page=0):
+def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, channel_name, file_path, page=0):
     if not cid:
         return
     episode_list = GetEpisodeList(cid, page)
@@ -205,15 +213,15 @@ def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, file_path, page=0):
         epi_title = episode['v_title']
         strm_path = file_path + "\\" + epi_title.replace("_", "_ep") + ".strm"
         nfo_path = strm_path[:-5] + ".nfo"
-        if os.path.exists(strm_path) and os.path.exists(nfo_path):
+        if not NeedAddNfoFile(nfo_path, filter_name):
             return
         with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
             f1.write(episode['play_url'])
-            CreateEpisodeNfoFiles(episode, count, tv_title, filter_name, f2)
+            CreateEpisodeNfoFiles(episode, count, tv_title, channel_name, filter_name, f2)
         count += 1
 
 
-def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
+def CreateMovieNfoFiles(movie_item, filter_name, channel_name, nfo_file):
     title = movie_item.get("title")
     # movie *.nfo file
     root = etree.Element("movie")
@@ -326,8 +334,16 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     root.append(xtrailer)
     # tag genre
     xgenre = etree.Element("genre")
-    xgenre.text = filter_name
+    xgenre.text = ""
     root.append(xgenre)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = channel_name
+    root.append(xtag)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = filter_name
+    root.append(xtag)
     # tag country
     xcountry = etree.Element("country")
     xcountry.text = movie_item.get("area_name")
@@ -389,7 +405,7 @@ def CreateMovieNfoFiles(movie_item, filter_name, nfo_file):
     nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
 
 
-def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
+def CreateTVShowNfoFiles(tv_item, filter_name, channel_name, nfo_file):
     title = tv_item.get("title")
     # tvshow *.nfo file
     root = etree.Element("tvshow")
@@ -527,8 +543,16 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
     root.append(xtrailer)
     # tag genre
     xgenre = etree.Element("genre")
-    xgenre.text = filter_name
+    xgenre.text = ""
     root.append(xgenre)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = channel_name
+    root.append(xtag)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = filter_name
+    root.append(xtag)
     # tag country
     xcountry = etree.Element("country")
     xcountry.text = tv_item.get("area_name")
@@ -575,7 +599,7 @@ def CreateTVShowNfoFiles(tv_item, filter_name, nfo_file):
     nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
 
 
-def CreateEpisodeNfoFiles(epi_item, index, tv_title, filter_name, nfo_file):
+def CreateEpisodeNfoFiles(epi_item, index, tv_title, channel_name, filter_name, nfo_file):
     title = epi_item.get("v_title")
     # episodedetails *.nfo file
     root = etree.Element("episodedetails")
@@ -665,8 +689,16 @@ def CreateEpisodeNfoFiles(epi_item, index, tv_title, filter_name, nfo_file):
     root.append(xuniqueid)
     # tag genre
     xgenre = etree.Element("genre")
-    xgenre.text = filter_name
+    xgenre.text = ""
     root.append(xgenre)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = channel_name
+    root.append(xtag)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = filter_name
+    root.append(xtag)
     # tag credits
     xcredits = etree.Element("credits")
     xcredits.text = ""
@@ -723,6 +755,32 @@ def CreateEpisodeNfoFiles(epi_item, index, tv_title, filter_name, nfo_file):
 
 def SecondtoYMDHMS(secTime):
     return str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(secTime)))
+
+
+def NeedAddNfoFile(nfo_path, filter_name):
+    if not os.path.exists(nfo_path):
+        return True
+    else:
+        add_xml_node_tag(nfo_path, filter_name)
+        return False
+
+
+def add_xml_node_tag(nfo_path, filter_name):
+    is_exit = False
+    xml = etree.parse(nfo_path)
+    root = xml.getroot()
+    node = root.xpath("//tag")
+    for item in node:
+        if filter_name == item.text:
+            is_exit = True
+            break
+    if not is_exit:
+        xtag = etree.Element("tag")
+        xtag.text = filter_name
+        root.append(xtag)
+        with open(nfo_path, "w+") as f:
+            f.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
+        print "Add New Tag: " + filter_name
 
 
 if __name__ == "__main__":
