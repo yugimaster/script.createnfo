@@ -96,6 +96,10 @@ class TencentVideo(object):
         API = '/cover_details/get_cover_videos?tv_cgi_ver=1.0&format=json&req_from=PVS_APK&page_start={0}&page_size=15&video_filter=all&cid={1}&Q-UA={2}'.format(index, cid, QUA)
         return self.get_json(SERVER + API)
 
+    def variety_review(self, column_id, pagesize=15, pagenum=0):
+        API = '/column_info/get_column_info?column_id={0}&page_size={1}&page_num={2}&format=json&type=10&Q-UA={3}'.format(column_id, pagesize, pagenum, QUA)
+        return self.get_json(SERVER + API)
+
 
 def GetFilterList(channel_id):
     data = TencentVideo().filter_list(channel_id)
@@ -134,7 +138,10 @@ def GetVideoList():
             for listitem in channel_list:
                 title = listitem.get("title")
                 cid = listitem.get("id")
-                print title
+                try:
+                    print title
+                except Exception:
+                    print "can't print title"
                 print channel_id
                 if title == "":
                     print "No name exit"
@@ -143,6 +150,8 @@ def GetVideoList():
                     threads.append(gevent.spawn(SaveMovieFiles, cid, item['chi_name'], channel_name))
                 elif channel_id == "tv":
                     threads.append(gevent.spawn(SaveTVShowFiles, cid, item['chi_name'], channel_name))
+                elif channel_id == "variety":
+                    threads.append(gevent.spawn(SaveVarietyFiles, cid, item['chi_name'], channel_name))
     gevent.joinall(threads)
 
 
@@ -160,6 +169,15 @@ def GetEpisodeList(cid, index):
     if "data" in data:
         data = data['data']
         return data.get("videos")
+    else:
+        return None
+
+
+def GetVarietyReview(column_id, index):
+    data = TencentVideo().variety_review(column_id, pagenum=index)
+    if "data" in data:
+        data = data['data']
+        return data.get("list")
     else:
         return None
 
@@ -218,6 +236,44 @@ def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, channel_name, file_path, 
         with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
             f1.write(episode['play_url'])
             CreateEpisodeNfoFiles(episode, count, tv_title, channel_name, filter_name, f2)
+        count += 1
+
+
+def SaveVarietyFiles(cid, filter_name, channel_name):
+    data = GetVideoDetail(cid)
+    data = data.get("data")
+    if not data:
+        return
+    title = data.get("title").replace(":", "_")
+    if title == "":
+        return
+    file_path = "C:\\xbmc-workspace\\LocalDB\\TVShows\\" + title
+    if not os.path.exists(file_path):
+        os.mkdir(file_path)
+    nfo_path = file_path + "\\tvshow.nfo"
+    if not NeedAddNfoFile(nfo_path, filter_name):
+        return
+    with open(nfo_path, "w+") as f:
+        CreateVarietyNfoFiles(data, filter_name, channel_name, f)
+    SaveVarietyReviewFiles(data.get("column_id"), title, filter_name, channel_name, file_path)
+
+
+def SaveVarietyReviewFiles(column_id, var_title, filter_name, channel_name, file_path, page=0):
+    if not column_id:
+        return
+    review_list = GetVarietyReview(column_id, page)
+    if not review_list:
+        return
+    count = 1
+    for review in review_list:
+        date = review['publish_date'][:10]
+        strm_path = file_path + "\\" + var_title + "_" + date + ".strm"
+        nfo_path = strm_path[:-5] + ".nfo"
+        if not NeedAddNfoFile(nfo_path, filter_name):
+            return
+        with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
+            f1.write("playvideo")
+            CreateReviewNfoFiles(review, count, var_title, filter_name, channel_name, f2)
         count += 1
 
 
@@ -726,6 +782,348 @@ def CreateEpisodeNfoFiles(epi_item, index, tv_title, channel_name, filter_name, 
     # tag aired
     xaired = etree.Element("aired")
     xaired.text = epi_item['v_ext_info'].get("publish_date")
+    root.append(xaired)
+    # tag studio
+    xstudio = etree.Element("studio")
+    xstudio.text = ""
+    root.append(xstudio)
+    # tag trailer
+    xtrailer = etree.Element("trailer")
+    xtrailer.text = ""
+    root.append(xtrailer)
+    # tag actor
+    xactor = etree.Element("actor")
+    xactor.text = ""
+    root.append(xactor)
+    # tag resume
+    xresume = etree.Element("resume")
+    xposition = etree.SubElement(xresume, "position")
+    xposition.text = ""
+    xtotal = etree.SubElement(xresume, "total")
+    xtotal.text = ""
+    root.append(xresume)
+    # tag dateadded
+    xdateadded = etree.Element("dateadded")
+    xdateadded.text = SecondtoYMDHMS(time.time())
+    root.append(xdateadded)
+    nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
+
+
+def CreateVarietyNfoFiles(variety_item, filter_name, channel_name, nfo_file):
+    title = variety_item.get("title")
+    # tvshow *.nfo file
+    root = etree.Element("tvshow")
+    # tag title
+    xtitle = etree.Element("title")
+    xtitle.text = title
+    root.append(xtitle)
+    # tag showtitle
+    xshowtitle = etree.Element("showtitle")
+    xshowtitle.text = title
+    root.append(xshowtitle)
+    # tag sorttitle
+    xsorttitle = etree.Element("sorttitle")
+    xsorttitle.text = title
+    root.append(xsorttitle)
+    # tag set
+    xset = etree.Element("set")
+    xset.text = ""
+    root.append(xset)
+    # tag ratings
+    xrating = etree.Element("rating")
+    xrating.text = variety_item.get("score")
+    root.append(xrating)
+    # tag year
+    xyear = etree.Element("year")
+    xyear.text = variety_item.get("year")
+    root.append(xyear)
+    # tag top250
+    xtop250 = etree.Element("top250")
+    root.append(xtop250)
+    # tag season
+    xseason = etree.Element("season")
+    xseason.text = "0"
+    root.append(xseason)
+    # tag episode
+    xepisode = etree.Element("episode")
+    xepisode.text = variety_item.get("episode_all")
+    root.append(xepisode)
+    # tag displayseason
+    xdisplayseason = etree.Element("displayseason")
+    xdisplayseason.text = "-1"
+    root.append(xdisplayseason)
+    # tag displayepisode
+    xdisplayepisode = etree.Element("displayepisode")
+    xdisplayepisode.text = "-1"
+    root.append(xdisplayepisode)
+    # tag votes
+    xvotes = etree.Element("votes")
+    root.append(xvotes)
+    # tag outline
+    xoutline = etree.Element("outline")
+    xoutline.text = variety_item.get("s_title")
+    root.append(xoutline)
+    # tag plot
+    xplot = etree.Element("plot")
+    xplot.text = variety_item.get("c_description")
+    root.append(xplot)
+    # tag tagline
+    xtagline = etree.Element("tagline")
+    xtagline.text = ""
+    root.append(xtagline)
+    # tag runtime
+    xruntime = etree.Element("runtime")
+    xruntime.text = ""
+    root.append(xruntime)
+    # tag thumb
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = variety_item['cover_pictures'].get("pic_770x1080")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = variety_item['cover_pictures'].get("pic_260x364")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = variety_item['cover_pictures'].get("pic_350x490")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = variety_item.get("ver_pic_url")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = variety_item['cover_pictures'].get("pic_498x280")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = variety_item['cover_pictures'].get("pic_408x230")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = variety_item.get("hori_pic_url")
+    root.append(xthumb)
+    # tag fanart
+    xfanart = etree.Element("fanart")
+    xthumb = etree.SubElement(xfanart, "thumb")
+    xthumb.text = variety_item['cover_pictures'].get("pic_1920x1080")
+    root.append(xfanart)
+    # tag mpaa
+    xmpaa = etree.Element("mpaa")
+    xmpaa.text = ""
+    root.append(xmpaa)
+    # tag playcount
+    xplaycount = etree.Element("playcount")
+    xplaycount.text = ""
+    root.append(xplaycount)
+    # tag lastplayed
+    xlastplayed = etree.Element("lastplayed")
+    xlastplayed.text = ""
+    root.append(xlastplayed)
+    # tag episodeguide
+    xepisodeguide = etree.Element("episodeguide")
+    xepisodeguide.text = ""
+    root.append(xepisodeguide)
+    # tag id
+    xid = etree.Element("id")
+    xid.text = variety_item.get("c_id")
+    root.append(xid)
+    # tag uniqueid
+    xuniqueid = etree.Element("uniqueid")
+    xuniqueid.text = ""
+    root.append(xuniqueid)
+    # tag filenameandpath
+    xpath = etree.Element("filenameandpath")
+    xpath.text = ""
+    root.append(xpath)
+    # tag status
+    xstatus = etree.Element("status")
+    xstatus.text = ""
+    root.append(xstatus)
+    # tag code
+    xcode = etree.Element("code")
+    xcode.text = ""
+    root.append(xcode)
+    # tag aired
+    xaired = etree.Element("aired")
+    xaired.text = ""
+    root.append(xaired)
+    # tag trailer
+    xtrailer = etree.Element("trailer")
+    root.append(xtrailer)
+    # tag genre
+    xgenre = etree.Element("genre")
+    xgenre.text = ""
+    root.append(xgenre)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = channel_name
+    root.append(xtag)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = filter_name
+    root.append(xtag)
+    # tag country
+    xcountry = etree.Element("country")
+    xcountry.text = variety_item.get("area_name")
+    root.append(xcountry)
+    # tag premiered
+    xpremiered = etree.Element("premiered")
+    xpremiered.text = variety_item.get("publish_date")
+    root.append(xpremiered)
+    # tag credits
+    xcredits = etree.Element("credits")
+    root.append(xcredits)
+    # tag fileinfo
+    xfileinfo = etree.Element("fileinfo")
+    root.append(xfileinfo)
+    # tag studio
+    xstudio = etree.Element("studio")
+    root.append(xstudio)
+    # tag director
+    director_list = variety_item.get("directors")
+    for item in director_list:
+        xdirector = etree.Element("director")
+        xdirector.text = item
+        root.append(xdirector)
+    # tag actor
+    actor_list = variety_item.get("guests")
+    for item in actor_list:
+        xactor = etree.Element("actor")
+        xname = etree.SubElement(xactor, "name")
+        xname.text = item
+        xrole = etree.SubElement(xactor, "role")
+        xrole.text = ""
+        root.append(xactor)
+    # tag resume
+    xresume = etree.Element("resume")
+    xposition = etree.SubElement(xresume, "position")
+    xposition.text = ""
+    xtotal = etree.SubElement(xresume, "total")
+    xtotal.text = ""
+    root.append(xresume)
+    # tag dateadded
+    xdateadded = etree.Element("dateadded")
+    xdateadded.text = SecondtoYMDHMS(time.time())
+    root.append(xdateadded)
+    nfo_file.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
+
+
+def CreateReviewNfoFiles(rev_item, index, tv_title, channel_name, filter_name, nfo_file):
+    title = rev_item.get("title")
+    # episodedetails *.nfo file
+    root = etree.Element("episodedetails")
+    # tag title
+    xtitle = etree.Element("title")
+    xtitle.text = title
+    root.append(xtitle)
+    # tag showtitle
+    xshowtitle = etree.Element("showtitle")
+    xshowtitle.text = tv_title
+    root.append(xshowtitle)
+    # tag rate
+    xrate = etree.Element("rate")
+    xrate.text = ""
+    root.append(xrate)
+    # tag userrating
+    xuserrating = etree.Element("userrating")
+    xuserrating.text = ""
+    root.append(xuserrating)
+    # tag top250
+    xtop250 = etree.Element("top250")
+    xtop250.text = ""
+    root.append(xtop250)
+    # tag season
+    xseason = etree.Element("season")
+    xseason.text = ""
+    root.append(xseason)
+    # tag episode
+    xepisode = etree.Element("episode")
+    xepisode.text = str(index)
+    # tag displayseason
+    xdisplayseason = etree.Element("displayseason")
+    xdisplayseason.text = "-1"
+    root.append(xdisplayseason)
+    # tag displayepisode
+    xdisplayepisode = etree.Element("displayepisode")
+    xdisplayepisode.text = "-1"
+    root.append(xdisplayepisode)
+    # tag outline
+    xoutline = etree.Element("outline")
+    xoutline.text = rev_item.get("second_title")
+    root.append(xoutline)
+    # tag plot
+    xplot = etree.Element("plot")
+    xplot.text = rev_item.get("v_description")
+    root.append(xplot)
+    # tag tagline
+    xtagline = etree.Element("tagline")
+    xtagline.text = ""
+    root.append(xtagline)
+    # tag runtime
+    xruntime = etree.Element("runtime")
+    xruntime.text = ""
+    root.append(xruntime)
+    # tag thumb
+    xthumb = etree.Element("thumb", aspect="banner")
+    xthumb.text = rev_item.get("img_url_2")
+    root.append(xthumb)
+    xthumb = etree.Element("thumb", aspect="poster")
+    xthumb.text = rev_item.get("img_url_1")
+    root.append(xthumb)
+    # tag mpaa
+    xmpaa = etree.Element("mpaa")
+    xmpaa.text = ""
+    root.append(xmpaa)
+    # tag playcount
+    xplaycount = etree.Element("playcount")
+    xplaycount.text = ""
+    root.append(xplaycount)
+    # tag lastplayed
+    xlastplayed = etree.Element("lastplayed")
+    xlastplayed.text = ""
+    root.append(xlastplayed)
+    # tag id
+    xid = etree.Element("id")
+    xid.text = rev_item['cover_id']
+    root.append(xid)
+    # tag uniqueid
+    xuniqueid = etree.Element("uniqueid")
+    xuniqueid.text = ""
+    root.append(xuniqueid)
+    # tag genre
+    xgenre = etree.Element("genre")
+    xgenre.text = ""
+    root.append(xgenre)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = channel_name
+    root.append(xtag)
+    # tag tag
+    xtag = etree.Element("tag")
+    xtag.text = filter_name
+    root.append(xtag)
+    # tag credits
+    xcredits = etree.Element("credits")
+    xcredits.text = ""
+    root.append(xcredits)
+    # tag director
+    xdirector = etree.Element("director")
+    xdirector.text = ""
+    root.append(xdirector)
+    # tag premiered
+    xpremiered = etree.Element("premiered")
+    xpremiered.text = rev_item.get("publish_date")
+    root.append(xpremiered)
+    # tag year
+    xyear = etree.Element("year")
+    xyear.text = rev_item.get("publish_date")[:4]
+    root.append(xyear)
+    # tag status
+    xstatus = etree.Element("status")
+    xstatus.text = ""
+    root.append(xstatus)
+    # tag code
+    xcode = etree.Element("code")
+    xcode.text = ""
+    root.append(xcode)
+    # tag aired
+    xaired = etree.Element("aired")
+    xaired.text = rev_item.get("publish_date")
     root.append(xaired)
     # tag studio
     xstudio = etree.Element("studio")
