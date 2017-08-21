@@ -149,7 +149,7 @@ def GetVideoList():
                     return
                 if channel_id == "movie":
                     threads.append(gevent.spawn(SaveMovieFiles, cid, item['chi_name'], channel_name))
-                elif channel_id in ["tv", "children"]:
+                elif channel_id in ["tv", "children", "cartoon"]:
                     threads.append(gevent.spawn(SaveTVShowFiles, cid, item['chi_name'], channel_name))
                 elif channel_id == "variety":
                     threads.append(gevent.spawn(SaveVarietyFiles, cid, item['chi_name'], channel_name))
@@ -669,7 +669,7 @@ def CreateEpisodeNfoFiles(epi_item, index, tv_title, channel_name, filter_name, 
     root.append(xtitle)
     # tag showtitle
     xshowtitle = etree.Element("showtitle")
-    if channel_name == u"少儿":
+    if channel_name in [u"少儿", u"动漫"]:
         showtitle = epi_item.get("v_s_title")
     else:
         showtitle = tv_title
@@ -1222,7 +1222,7 @@ def make_episode_index(num, index):
 def set_episode_strm_path(file_path, tv_title, epi_title, channel_name, count):
     strm_path = ""
     file_path = file_path + "\\"
-    if channel_name == u"少儿":
+    if channel_name in [u"少儿", u"动漫"]:
         epi_info = tv_title + "_ep" + make_episode_index(episode_totalnum, count)
     else:
         epi_info = epi_title.replace("_", "_ep")
