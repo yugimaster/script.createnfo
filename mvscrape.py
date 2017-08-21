@@ -199,7 +199,7 @@ def SaveMovieFiles(cid, filter_name, channel_name):
     nfo_path = file_path + title + ".nfo"
     with open(strm_path, "w+") as f1:
         f1.write("playvideo")
-    if not NeedAddNfoFile(nfo_path, filter_name):
+    if not NeedAddNfoFile(nfo_path, filter_name, channel_name):
         return
     with open(nfo_path, "w+") as f2:
         CreateMovieNfoFiles(data, filter_name, channel_name, f2)
@@ -217,7 +217,7 @@ def SaveTVShowFiles(cid, filter_name, channel_name):
     if not os.path.exists(file_path):
         os.mkdir(file_path)
     nfo_path = file_path + "\\tvshow.nfo"
-    if not NeedAddNfoFile(nfo_path, filter_name):
+    if not NeedAddNfoFile(nfo_path, filter_name, channel_name):
         return
     with open(nfo_path, "w+") as f:
         CreateTVShowNfoFiles(data, filter_name, channel_name, f)
@@ -235,7 +235,7 @@ def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, channel_name, file_path, 
         epi_title = episode['v_title']
         strm_path = set_episode_strm_path(file_path, tv_title, epi_title, channel_name, count)
         nfo_path = strm_path[:-5] + ".nfo"
-        if not NeedAddNfoFile(nfo_path, filter_name):
+        if not NeedAddNfoFile(nfo_path, filter_name, channel_name):
             return
         with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
             f1.write(episode['play_url'])
@@ -255,7 +255,7 @@ def SaveVarietyFiles(cid, filter_name, channel_name):
     if not os.path.exists(file_path):
         os.mkdir(file_path)
     nfo_path = file_path + "\\tvshow.nfo"
-    if not NeedAddNfoFile(nfo_path, filter_name):
+    if not NeedAddNfoFile(nfo_path, filter_name, channel_name):
         return
     with open(nfo_path, "w+") as f:
         CreateVarietyNfoFiles(data, filter_name, channel_name, f)
@@ -273,7 +273,7 @@ def SaveVarietyReviewFiles(column_id, var_title, filter_name, channel_name, file
         date = review['publish_date'][:10]
         strm_path = file_path + "\\" + var_title + "_" + date + ".strm"
         nfo_path = strm_path[:-5] + ".nfo"
-        if not NeedAddNfoFile(nfo_path, filter_name):
+        if not NeedAddNfoFile(nfo_path, filter_name, channel_name):
             return
         with open(strm_path, "w+") as f1, open(nfo_path, "w+") as f2:
             f1.write("playvideo")
@@ -1163,30 +1163,38 @@ def SecondtoYMDHMS(secTime):
     return str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(secTime)))
 
 
-def NeedAddNfoFile(nfo_path, filter_name):
+def NeedAddNfoFile(nfo_path, filter_name, channel_name):
     if not os.path.exists(nfo_path):
         return True
     else:
-        add_xml_node_tag(nfo_path, filter_name)
+        add_xml_node_tag(nfo_path, filter_name, channel_name)
         return False
 
 
-def add_xml_node_tag(nfo_path, filter_name):
-    is_exit = False
+def add_xml_node_tag(nfo_path, filter_name, channel_name):
+    tag_list = []
+    is_exit = True
     xml = etree.parse(nfo_path)
     root = xml.getroot()
     node = root.xpath("//tag")
     for item in node:
-        if filter_name == item.text:
-            is_exit = True
-            break
-    if not is_exit:
+        tag_list.append(item.text)
+    if channel_name not in tag_list:
+        xtag = etree.Element("tag")
+        xtag.text = channel_name
+        root.append(xtag)
+        is_exit = False
+        print "Add New Tag : " + channel_name
+    if filter_name not in tag_list:
         xtag = etree.Element("tag")
         xtag.text = filter_name
         root.append(xtag)
+        is_exit = False
+        print "Add New Tag : " + filter_name
+    if not is_exit:
         with open(nfo_path, "w+") as f:
             f.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
-        print "Add New Tag: " + filter_name
+        print "Add New Tag Finished"
 
 
 def make_episode_index(num, index):
