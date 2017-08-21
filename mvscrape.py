@@ -19,6 +19,7 @@ from lxml import etree
 SERVER = "http://tv.t002.ottcn.com/i-tvbin/qtv_video"
 QUA = urllib.quote_plus("QV=1&VN=1.1.27&PT=PVS&RL=1920x1080&IT=12117592000&OS=1.1.27&CHID=13032&DV=tencent_macaroni")
 totaltime_videodetail = 0
+episode_totalnum = 0
 
 
 def GetHttpData(url, data=None, cookie=None, headers=None):
@@ -148,7 +149,7 @@ def GetVideoList():
                     return
                 if channel_id == "movie":
                     threads.append(gevent.spawn(SaveMovieFiles, cid, item['chi_name'], channel_name))
-                elif channel_id == "tv":
+                elif channel_id in ["tv", "children"]:
                     threads.append(gevent.spawn(SaveTVShowFiles, cid, item['chi_name'], channel_name))
                 elif channel_id == "variety":
                     threads.append(gevent.spawn(SaveVarietyFiles, cid, item['chi_name'], channel_name))
@@ -168,6 +169,9 @@ def GetEpisodeList(cid, index):
     data = TencentVideo().episode_list(cid, index)
     if "data" in data:
         data = data['data']
+        total_num = data.get("video_num", 0)
+        global episode_totalnum
+        episode_totalnum = total_num
         return data.get("videos")
     else:
         return None
@@ -187,7 +191,7 @@ def SaveMovieFiles(cid, filter_name, channel_name):
     data = data.get("data")
     if not data:
         return
-    title = data.get("title").replace(":", "_")
+    title = data.get("title").replace(":", "_").replace("?", " ")
     if title == "":
         return
     file_path = "C:\\xbmc-workspace\\LocalDB\\Movies\\"
@@ -229,7 +233,7 @@ def SaveSeasonEpisodeFiles(cid, tv_title, filter_name, channel_name, file_path, 
     count = 1
     for episode in episode_list:
         epi_title = episode['v_title']
-        strm_path = file_path + "\\" + epi_title.replace("_", "_ep") + ".strm"
+        strm_path = set_episode_strm_path(file_path, tv_title, epi_title, channel_name, count)
         nfo_path = strm_path[:-5] + ".nfo"
         if not NeedAddNfoFile(nfo_path, filter_name):
             return
@@ -665,7 +669,11 @@ def CreateEpisodeNfoFiles(epi_item, index, tv_title, channel_name, filter_name, 
     root.append(xtitle)
     # tag showtitle
     xshowtitle = etree.Element("showtitle")
-    xshowtitle.text = tv_title
+    if channel_name == u"少儿":
+        showtitle = epi_item.get("v_s_title")
+    else:
+        showtitle = tv_title
+    xshowtitle.text = showtitle
     root.append(xshowtitle)
     # tag rate
     xrate = etree.Element("rate")
@@ -1179,6 +1187,39 @@ def add_xml_node_tag(nfo_path, filter_name):
         with open(nfo_path, "w+") as f:
             f.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
         print "Add New Tag: " + filter_name
+
+
+def make_episode_index(num, index):
+    head_index = ""
+    if num in range(1, 10):
+        head_index = "0"
+    elif num in range(10, 100):
+        if index in range(1, 10):
+            head_index = "0"
+    elif num in range(100, 1000):
+        if index in range(1, 10):
+            head_index = "00"
+        elif index in range(10, 100):
+            head_index = "0"
+    else:
+        if index in range(1, 10):
+            head_index = "000"
+        elif index in range(10, 100):
+            head_index = "00"
+        elif index in range(100, 1000):
+            head_index = "0"
+    return head_index + str(index)
+
+
+def set_episode_strm_path(file_path, tv_title, epi_title, channel_name, count):
+    strm_path = ""
+    file_path = file_path + "\\"
+    if channel_name == u"少儿":
+        epi_info = tv_title + "_ep" + make_episode_index(episode_totalnum, count)
+    else:
+        epi_info = epi_title.replace("_", "_ep")
+    strm_path = file_path + epi_info + ".strm"
+    return strm_path
 
 
 if __name__ == "__main__":
