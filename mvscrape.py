@@ -147,7 +147,7 @@ def GetVideoList():
                 if title == "":
                     print "No name exit"
                     return
-                if channel_id == "movie":
+                if channel_id in ["movie", "hollywood_pay"]:
                     threads.append(gevent.spawn(SaveMovieFiles, cid, item['chi_name'], channel_name))
                 elif channel_id in ["tv", "children", "cartoon"]:
                     threads.append(gevent.spawn(SaveTVShowFiles, cid, item['chi_name'], channel_name))
