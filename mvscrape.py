@@ -101,6 +101,14 @@ class TencentVideo(object):
         API = '/column_info/get_column_info?column_id={0}&page_size={1}&page_num={2}&format=json&type=10&Q-UA={3}'.format(column_id, pagesize, pagenum, QUA)
         return self.get_json(SERVER + API)
 
+    def topic_list(self, page, pagenum):
+        API = '/video_list/get_video_list?platform=8&site=topic&filter=&list_route_type=1&sortby=1&fieldset=2003&page={0}&pagesize={1}&otype=json&Q-UA={2}'.format(page, pagenum, QUA)
+        return self.get_json(SERVER + API)
+
+    def topic_detail(self, tid):
+        API = '/topic_detail/qtv_get_topic_detail?tid={0}&format=json&licence=icntv&Q-UA={1}'.format(tid, QUA)
+        return self.get_json(SERVER + API)
+
 
 def GetFilterList(channel_id):
     data = TencentVideo().filter_list(channel_id)
@@ -115,6 +123,24 @@ def GetChannelList(channel_id, route, sortby, filter_name, select_type, page, pa
     except Exception:
         channel_list = []
     return channel_list
+
+
+def GetTopicList(page, pagenum):
+    data = TencentVideo().topic_list(page, pagenum)
+    try:
+        topic_list = data['data']['infos']
+    except Exception:
+        topic_list = []
+    return topic_list
+
+
+def GetTopicDetailList(tid):
+    data = TencentVideo().topic_detail(tid)
+    try:
+        topic_detail_list = data['data']['media_list']
+    except Exception:
+        topic_detail_list = []
+    return topic_detail_list
 
 
 def GetVideoList():
@@ -156,6 +182,32 @@ def GetVideoList():
     gevent.joinall(threads)
 
 
+def GetTopicVideoList():
+    topic_list = []
+    threads = []
+    first_list = GetTopicList(0, 30)
+    topic_list.extend(first_list)
+    second_list = GetTopicList(1, 30)
+    topic_list.extend(second_list)
+    for listitem in topic_list:
+        tid = listitem['id']
+        topic_title = listitem['title']
+        topic_detail_list = GetTopicDetailList(tid)
+        for item in topic_detail_list:
+            title = item.get("title")
+            cid = item.get("id")
+            try:
+                print title
+            except Exception:
+                print "can't print titile"
+            print "topic"
+            if title == "":
+                print "No name exit"
+                return
+            threads.append(gevent.spawn(SaveMovieFiles, cid, "", u"专题", topic_title))
+    gevent.joinall(threads)
+
+
 def GetVideoDetail(cid):
     t0 = datetime.datetime.now()
     data = TencentVideo().video_detail(cid)
@@ -186,7 +238,7 @@ def GetVarietyReview(column_id, index):
         return None
 
 
-def SaveMovieFiles(cid, filter_name, channel_name):
+def SaveMovieFiles(cid, filter_name, channel_name, set_title=""):
     data = GetVideoDetail(cid)
     data = data.get("data")
     if not data:
@@ -199,10 +251,10 @@ def SaveMovieFiles(cid, filter_name, channel_name):
     nfo_path = file_path + title + ".nfo"
     with open(strm_path, "w+") as f1:
         f1.write("playvideo")
-    if not NeedAddNfoFile(nfo_path, filter_name, channel_name):
+    if not NeedAddNfoFile(nfo_path, filter_name, channel_name, set_title):
         return
     with open(nfo_path, "w+") as f2:
-        CreateMovieNfoFiles(data, filter_name, channel_name, f2)
+        CreateMovieNfoFiles(data, filter_name, channel_name, f2, set_title)
 
 
 def SaveTVShowFiles(cid, filter_name, channel_name):
@@ -281,7 +333,7 @@ def SaveVarietyReviewFiles(column_id, var_title, filter_name, channel_name, file
         count += 1
 
 
-def CreateMovieNfoFiles(movie_item, filter_name, channel_name, nfo_file):
+def CreateMovieNfoFiles(movie_item, filter_name, channel_name, nfo_file, set_title):
     title = movie_item.get("title")
     # movie *.nfo file
     root = etree.Element("movie")
@@ -299,7 +351,7 @@ def CreateMovieNfoFiles(movie_item, filter_name, channel_name, nfo_file):
     root.append(xsorttitle)
     # tag set
     xset = etree.Element("set")
-    xset.text = ""
+    xset.text = set_title
     root.append(xset)
     # tag ratings
     xrating = etree.Element("rating")
@@ -401,9 +453,10 @@ def CreateMovieNfoFiles(movie_item, filter_name, channel_name, nfo_file):
     xtag.text = channel_name
     root.append(xtag)
     # tag tag
-    xtag = etree.Element("tag")
-    xtag.text = filter_name
-    root.append(xtag)
+    if filter_name:
+        xtag = etree.Element("tag")
+        xtag.text = filter_name
+        root.append(xtag)
     # tag country
     xcountry = etree.Element("country")
     xcountry.text = movie_item.get("area_name")
@@ -1163,15 +1216,15 @@ def SecondtoYMDHMS(secTime):
     return str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(secTime)))
 
 
-def NeedAddNfoFile(nfo_path, filter_name, channel_name):
+def NeedAddNfoFile(nfo_path, filter_name, channel_name, set_title=""):
     if not os.path.exists(nfo_path):
         return True
     else:
-        add_xml_node_tag(nfo_path, filter_name, channel_name)
+        add_xml_node_tag(nfo_path, filter_name, channel_name, set_title)
         return False
 
 
-def add_xml_node_tag(nfo_path, filter_name, channel_name):
+def add_xml_node_tag(nfo_path, filter_name, channel_name, set_title):
     tag_list = []
     is_exit = True
     xml = etree.parse(nfo_path)
@@ -1185,12 +1238,19 @@ def add_xml_node_tag(nfo_path, filter_name, channel_name):
         root.append(xtag)
         is_exit = False
         print "Add New Tag : " + channel_name
-    if filter_name not in tag_list:
+    if filter_name and filter_name not in tag_list:
         xtag = etree.Element("tag")
         xtag.text = filter_name
         root.append(xtag)
         is_exit = False
         print "Add New Tag : " + filter_name
+    if set_title:
+        node_set = root.xpath("//set")
+        if node_set[0].text:
+            return
+        node_set[0].text = set_title
+        is_exit = False
+        print "Fix Movie Set : " + set_title
     if not is_exit:
         with open(nfo_path, "w+") as f:
             f.write(etree.tostring(root, pretty_print=True, encoding="utf-8", xml_declaration=True))
